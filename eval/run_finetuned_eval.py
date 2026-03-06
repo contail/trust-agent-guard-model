@@ -10,11 +10,11 @@ from pathlib import Path
 from mlx_lm import load, generate
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SYSTEM_PROMPT_PATH = PROJECT_ROOT / "prompts" / "system_prompt_v3.txt"
+SYSTEM_PROMPT_PATH = PROJECT_ROOT / "prompts" / "system_prompt_v4.txt"
 RESULTS_DIR = PROJECT_ROOT / "eval" / "results"
 
 MODEL_PATH = "Qwen/Qwen3-8B"
-ADAPTER_PATH = str(PROJECT_ROOT / "training" / "adapters_v4")
+ADAPTER_PATH = str(PROJECT_ROOT / "training" / "adapters_v10")
 
 # CLI로 테스트 파일 지정 가능: python run_finetuned_eval.py [test_cases_v2|test_cases_v3]
 import sys as _sys
@@ -71,9 +71,17 @@ def extract_json(text: str) -> str:
 
 
 def verdict_to_decision(verdict: dict) -> str:
-    # Config Diagnosis mode
+    # Config Diagnosis mode — full wrapper format
     if "config_safe" in verdict:
         return "PASS" if verdict["config_safe"] else "BLOCK"
+    # Config Diagnosis mode — single finding format (no config_safe wrapper)
+    if "field" in verdict and "severity" in verdict:
+        severity = verdict.get("severity", "NONE")
+        if severity in ("CRITICAL", "HIGH"):
+            return "BLOCK"
+        if severity in ("MEDIUM", "LOW"):
+            return "ESCALATE"
+        return "PASS"
     # Action Judge mode
     if not verdict.get("threat_confirmed", False):
         return "PASS"
