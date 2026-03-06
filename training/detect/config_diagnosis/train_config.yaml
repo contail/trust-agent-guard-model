@@ -1,0 +1,17 @@
+model: Qwen/Qwen3-0.6B
+train: true
+data: data/detect/config_diagnosis
+adapter_path: training/detect/config_diagnosis
+batch_size: 2
+grad_accumulation_steps: 2
+iters: 1000
+learning_rate: 2e-5
+num_layers: 16
+max_seq_length: 2048
+steps_per_eval: 100
+save_every: 100
+steps_per_report: 10
+lora_parameters:
+  rank: 32
+  dropout: 0.0
+  scale: 64.0
