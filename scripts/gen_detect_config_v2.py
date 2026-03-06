@@ -505,7 +505,125 @@ DATA_JSONS = [
     {"nodes": [{"id": "a", "type": "input"}, {"id": "b", "type": "process"}, {"id": "c", "type": "output"}], "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c"}]},
 ]
 
-ALL_NO_JSONS = INFRA_CONFIGS + JS_CONFIGS + LANG_CONFIGS + DEVOPS_CONFIGS + DATA_JSONS
+# =====================================================================
+# HARD NEGATIVES — keyword-overlapping configs (auth/gateway/tools/allow/exec)
+# These share vocabulary with agent configs but are NOT agent configs.
+# =====================================================================
+
+# --- IAM / RBAC policies (auth, allow, permissions) ---
+IAM_CONFIGS = [
+    # AWS IAM Policies — diverse services
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["ec2:*"], "Resource": "*", "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["lambda:InvokeFunction", "lambda:GetFunction"], "Resource": "arn:aws:lambda:us-east-1:123456789:function:*"}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["ecs:RunTask", "ecs:StopTask", "ecs:DescribeTasks"], "Resource": "*"}, {"Effect": "Deny", "Action": ["ecs:DeleteCluster"], "Resource": "*"}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["sts:AssumeRole"], "Resource": "arn:aws:iam::123456789:role/deploy-role", "Condition": {"StringEquals": {"sts:ExternalId": "abc123"}}}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": ["arn:aws:s3:::my-bucket/*", "arn:aws:s3:::logs-bucket/*"]}, {"Effect": "Deny", "Action": ["s3:DeleteBucket"], "Resource": "*"}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:Scan"], "Resource": "arn:aws:dynamodb:*:*:table/users"}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage"], "Resource": "arn:aws:sqs:*:*:events-queue"}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"], "Resource": "arn:aws:logs:*:*:*"}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["secretsmanager:GetSecretValue"], "Resource": "arn:aws:secretsmanager:*:*:secret:prod/*"}, {"Effect": "Deny", "Action": ["secretsmanager:DeleteSecret"], "Resource": "*"}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["kms:Decrypt", "kms:GenerateDataKey"], "Resource": "arn:aws:kms:us-east-1:123456789:key/*"}]},
+    # AWS S3 Bucket Policy
+    {"Version": "2012-10-17", "Statement": [{"Sid": "PublicRead", "Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::cdn-assets/*"}]},
+    # AWS SCP (Service Control Policy)
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Deny", "Action": ["organizations:LeaveOrganization"], "Resource": "*"}, {"Effect": "Deny", "Action": ["iam:CreateUser", "iam:DeleteUser"], "Resource": "*", "Condition": {"StringNotEquals": {"aws:PrincipalOrgID": "o-abc123"}}}]},
+    # AWS Trust Policy
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"Service": "ec2.amazonaws.com"}, "Action": "sts:AssumeRole"}]},
+    {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::123456789:root"}, "Action": "sts:AssumeRole", "Condition": {"Bool": {"aws:MultiFactorAuthPresent": "true"}}}]},
+    # GCP IAM
+    {"bindings": [{"role": "roles/storage.objectViewer", "members": ["serviceAccount:my-sa@project.iam.gserviceaccount.com"]}, {"role": "roles/cloudfunctions.invoker", "members": ["allUsers"]}], "etag": "BwWo="},
+    {"bindings": [{"role": "roles/editor", "members": ["user:dev@company.com"]}, {"role": "roles/viewer", "members": ["group:readonly@company.com"]}], "version": 3},
+    {"bindings": [{"role": "roles/run.invoker", "members": ["serviceAccount:ci-cd@project.iam.gserviceaccount.com"]}, {"role": "roles/secretmanager.secretAccessor", "members": ["serviceAccount:app@project.iam.gserviceaccount.com"]}]},
+    # Azure RBAC
+    {"properties": {"roleDefinitionId": "/subscriptions/sub-id/providers/Microsoft.Authorization/roleDefinitions/b24988ac", "principalId": "user-object-id", "principalType": "User", "scope": "/subscriptions/sub-id/resourceGroups/prod-rg"}},
+    {"properties": {"roleDefinitionId": "/subscriptions/sub-id/providers/Microsoft.Authorization/roleDefinitions/acdd72a7", "principalId": "group-id", "principalType": "Group", "scope": "/subscriptions/sub-id"}, "type": "Microsoft.Authorization/roleAssignments"},
+    # Keycloak realm
+    {"realm": "my-app", "enabled": True, "sslRequired": "external", "clients": [{"clientId": "web-app", "publicClient": True, "redirectUris": ["http://localhost:3000/*"]}], "roles": {"realm": [{"name": "admin"}, {"name": "user"}]}},
+    # OPA / Rego policy (JSON)
+    {"package": "authz", "allow": False, "rules": [{"allow": True, "conditions": [{"field": "input.user.role", "equals": "admin"}]}, {"allow": True, "conditions": [{"field": "input.method", "equals": "GET"}]}]},
+]
+
+# --- API Gateway configs (gateway, auth, routes, bind) ---
+API_GATEWAY_CONFIGS = [
+    # AWS API Gateway
+    {"apiId": "abc123", "name": "user-api", "protocolType": "HTTP", "routeSelectionExpression": "$request.method $request.path", "corsConfiguration": {"allowOrigins": ["*"], "allowMethods": ["GET", "POST"]}},
+    {"restApiId": "xyz789", "name": "payment-api", "endpointConfiguration": {"types": ["REGIONAL"]}, "policy": {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": "*", "Action": "execute-api:Invoke", "Resource": "*"}]}},
+    {"apiId": "abc123", "routes": [{"routeKey": "GET /users", "target": "integrations/int-1"}, {"routeKey": "POST /users", "target": "integrations/int-2"}], "stages": [{"stageName": "prod", "autoDeploy": True}]},
+    # Kong Gateway
+    {"services": [{"name": "user-service", "url": "http://user-svc:8080", "routes": [{"paths": ["/api/users"], "methods": ["GET", "POST"]}]}], "plugins": [{"name": "key-auth", "config": {"key_names": ["apikey"]}}, {"name": "rate-limiting", "config": {"minute": 100}}]},
+    {"services": [{"name": "auth-service", "url": "http://auth:3000", "routes": [{"paths": ["/auth"], "strip_path": True}]}], "plugins": [{"name": "jwt", "config": {"claims_to_verify": ["exp"]}}, {"name": "cors", "config": {"origins": ["*"]}}]},
+    {"consumers": [{"username": "app-client", "credentials": [{"plugin": "key-auth", "key": "secret-api-key"}]}], "plugins": [{"name": "acl", "config": {"allow": ["group-a", "group-b"]}}]},
+    # Traefik
+    {"entryPoints": {"web": {"address": ":80"}, "websecure": {"address": ":443"}}, "http": {"routers": {"api": {"rule": "Host(`api.example.com`)", "service": "api-svc", "middlewares": ["auth"], "tls": {}}}, "middlewares": {"auth": {"basicAuth": {"users": ["admin:$apr1$hash"]}}}, "services": {"api-svc": {"loadBalancer": {"servers": [{"url": "http://localhost:8080"}]}}}}},
+    {"entryPoints": {"web": {"address": ":8080"}}, "providers": {"docker": {"exposedByDefault": False}}, "api": {"dashboard": True}, "certificatesResolvers": {"letsencrypt": {"acme": {"email": "admin@example.com", "storage": "acme.json"}}}},
+    # Caddy
+    {"apps": {"http": {"servers": {"srv0": {"listen": [":443"], "routes": [{"match": [{"host": ["example.com"]}], "handle": [{"handler": "reverse_proxy", "upstreams": [{"dial": "localhost:8080"}]}]}]}}}}},
+    # APISIX
+    {"routes": [{"uri": "/api/*", "upstream": {"type": "roundrobin", "nodes": {"backend:8080": 1}}, "plugins": {"key-auth": {}, "limit-req": {"rate": 10, "burst": 5}}}]},
+    # Nginx (JSON representation)
+    {"upstream": {"backend": {"servers": ["10.0.0.1:8080", "10.0.0.2:8080"], "keepalive": 32}}, "server": {"listen": 80, "server_name": "api.example.com", "location": {"/": {"proxy_pass": "http://backend", "proxy_set_header": {"Host": "$host", "X-Real-IP": "$remote_addr"}}}}},
+    {"server": {"listen": "443 ssl", "ssl_certificate": "/etc/nginx/ssl/cert.pem", "ssl_certificate_key": "/etc/nginx/ssl/key.pem", "location": {"/api": {"proxy_pass": "http://localhost:3000", "auth_basic": "Restricted", "auth_basic_user_file": "/etc/nginx/.htpasswd"}}}},
+]
+
+# --- App framework configs with auth/security keywords ---
+APP_FRAMEWORK_CONFIGS = [
+    # Django settings
+    {"SECRET_KEY": "django-insecure-abc123", "DEBUG": False, "ALLOWED_HOSTS": ["*"], "AUTHENTICATION_BACKENDS": ["django.contrib.auth.backends.ModelBackend"], "AUTH_USER_MODEL": "accounts.User", "MIDDLEWARE": ["django.middleware.security.SecurityMiddleware", "django.contrib.sessions.middleware.SessionMiddleware", "corsheaders.middleware.CorsMiddleware"], "DATABASES": {"default": {"ENGINE": "django.db.backends.postgresql", "NAME": "myapp", "HOST": "db.internal"}}},
+    {"REST_FRAMEWORK": {"DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.TokenAuthentication", "rest_framework.authentication.SessionAuthentication"], "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"], "DEFAULT_THROTTLE_RATES": {"user": "1000/day"}}, "CORS_ALLOWED_ORIGINS": ["http://localhost:3000"]},
+    {"INSTALLED_APPS": ["django.contrib.auth", "django.contrib.admin", "rest_framework", "corsheaders", "allauth", "allauth.account"], "AUTH_PASSWORD_VALIDATORS": [{"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 10}}], "SESSION_COOKIE_SECURE": True, "CSRF_COOKIE_SECURE": True},
+    # Spring Boot
+    {"spring": {"security": {"oauth2": {"client": {"registration": {"google": {"client-id": "xxx.apps.googleusercontent.com", "client-secret": "GOCSPX-xxx", "scope": ["openid", "profile", "email"]}}}}, "jwt": {"issuer-uri": "https://accounts.google.com"}}, "datasource": {"url": "jdbc:postgresql://db:5432/myapp", "username": "app", "password": "${DB_PASSWORD}"}}},
+    {"spring": {"security": {"user": {"name": "admin", "password": "{noop}admin123", "roles": ["ADMIN"]}}, "session": {"timeout": "30m"}, "mvc": {"cors": {"allowed-origins": ["http://localhost:3000"], "allowed-methods": ["GET", "POST", "PUT", "DELETE"]}}}},
+    {"server": {"port": 8080, "ssl": {"enabled": True, "key-store": "classpath:keystore.p12", "key-store-password": "${SSL_PASSWORD}"}}, "spring": {"security": {"oauth2": {"resourceserver": {"jwt": {"jwk-set-uri": "https://auth.example.com/.well-known/jwks.json"}}}}}},
+    # Next.js / NextAuth
+    {"nextAuth": {"providers": [{"id": "google", "name": "Google", "type": "oauth"}, {"id": "github", "name": "GitHub", "type": "oauth"}], "session": {"strategy": "jwt", "maxAge": 2592000}, "callbacks": {"authorized": True}}, "experimental": {"serverActions": True}},
+    {"auth": {"trustHost": True, "providers": ["google", "github", "credentials"], "pages": {"signIn": "/login", "error": "/auth/error"}, "session": {"strategy": "database"}, "callbacks": {}}, "redirects": [{"source": "/old", "destination": "/new"}]},
+    # Express / Passport
+    {"passport": {"strategies": [{"name": "jwt", "secretOrKey": "${JWT_SECRET}", "jwtFromRequest": "fromAuthHeaderAsBearerToken"}, {"name": "local", "usernameField": "email"}], "session": False}, "cors": {"origin": ["http://localhost:3000"], "credentials": True}, "rateLimit": {"windowMs": 900000, "max": 100}},
+    {"express": {"port": 3000, "session": {"secret": "${SESSION_SECRET}", "resave": False, "saveUninitialized": False}, "helmet": True, "cors": {"origin": "*"}, "bodyParser": {"limit": "10mb"}, "auth": {"jwt": {"secret": "${JWT_SECRET}", "expiresIn": "1h"}}}},
+    # Flask
+    {"SECRET_KEY": "flask-secret-key-change-in-prod", "SESSION_TYPE": "redis", "SESSION_REDIS": "redis://localhost:6379", "SQLALCHEMY_DATABASE_URI": "postgresql://user:pass@db/app", "JWT_SECRET_KEY": "jwt-secret", "JWT_ACCESS_TOKEN_EXPIRES": 3600},
+    # Laravel
+    {"auth": {"defaults": {"guard": "web", "passwords": "users"}, "guards": {"web": {"driver": "session", "provider": "users"}, "api": {"driver": "token", "provider": "users"}}, "providers": {"users": {"driver": "eloquent", "model": "App\\Models\\User"}}}, "passwords": {"users": {"provider": "users", "table": "password_resets", "expire": 60}}},
+    # Supabase
+    {"supabase": {"url": "https://abc.supabase.co", "anonKey": "eyJhbGciOiJIUzI1NiJ9...", "auth": {"autoRefreshToken": True, "persistSession": True, "detectSessionInUrl": True}, "db": {"schema": "public"}}},
+    # Firebase
+    {"firebase": {"projectId": "my-project", "auth": {"signInOptions": ["google.com", "github.com", "password"], "callbacks": {"signInSuccess": "/dashboard"}}, "firestore": {"rules": "service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if request.auth != null; } } }"}}},
+]
+
+# --- Firewall / WAF / Security tool configs ---
+SECURITY_TOOL_CONFIGS = [
+    # Cloudflare WAF rules
+    {"rules": [{"id": "rule-1", "action": "block", "expression": "cf.threat_score > 14", "description": "Block high threat"}, {"id": "rule-2", "action": "allow", "expression": "ip.src in {10.0.0.0/8}", "description": "Allow internal"}], "default_action": "allow"},
+    {"firewall_rules": [{"action": "block", "filter": {"expression": "http.request.uri.path contains \"/admin\" and not ip.src in {10.0.0.0/8}"}, "priority": 1}, {"action": "allow", "filter": {"expression": "http.request.method eq \"GET\""}, "priority": 100}]},
+    # iptables (JSON representation)
+    {"chains": {"INPUT": [{"action": "ACCEPT", "protocol": "tcp", "dport": 22, "source": "10.0.0.0/8"}, {"action": "ACCEPT", "protocol": "tcp", "dport": [80, 443]}, {"action": "DROP"}], "OUTPUT": [{"action": "ACCEPT"}], "FORWARD": [{"action": "DROP"}]}},
+    # AWS Security Group
+    {"GroupName": "web-sg", "Description": "Web server security group", "IpPermissions": [{"IpProtocol": "tcp", "FromPort": 80, "ToPort": 80, "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}, {"IpProtocol": "tcp", "FromPort": 443, "ToPort": 443, "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}, {"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22, "IpRanges": [{"CidrIp": "10.0.0.0/8"}]}]},
+    {"GroupName": "db-sg", "IpPermissions": [{"IpProtocol": "tcp", "FromPort": 5432, "ToPort": 5432, "UserIdGroupPairs": [{"GroupId": "sg-web"}]}], "IpPermissionsEgress": [{"IpProtocol": "-1", "IpRanges": [{"CidrIp": "0.0.0.0/0"}]}]},
+    # AWS WAF
+    {"Name": "block-sqli", "Priority": 1, "Action": {"Block": {}}, "Statement": {"SqliMatchStatement": {"FieldToMatch": {"Body": {}}, "TextTransformations": [{"Priority": 0, "Type": "URL_DECODE"}]}}, "VisibilityConfig": {"SampledRequestsEnabled": True}},
+    # Network policy (Calico/Cilium)
+    {"apiVersion": "projectcalico.org/v3", "kind": "NetworkPolicy", "metadata": {"name": "allow-web", "namespace": "prod"}, "spec": {"selector": "app == 'web'", "ingress": [{"action": "Allow", "protocol": "TCP", "destination": {"ports": [80, 443]}}], "egress": [{"action": "Allow"}]}},
+    # HashiCorp Vault
+    {"auth": [{"type": "approle", "path": "auth/approle", "config": {"default_lease_ttl": "1h"}}, {"type": "kubernetes", "path": "auth/kubernetes", "config": {"kubernetes_host": "https://k8s.internal"}}], "secrets": [{"type": "kv-v2", "path": "secret/", "config": {"max_versions": 10}}]},
+    # OAuth2 Proxy
+    {"provider": "google", "email_domains": ["company.com"], "cookie_secret": "base64-secret", "upstream": "http://localhost:8080", "http_address": "0.0.0.0:4180", "pass_access_token": True, "set_authorization_header": True},
+]
+
+# --- Service mesh / Proxy configs (gateway, auth, proxy keywords) ---
+SERVICE_MESH_CONFIGS = [
+    # Istio Gateway + VirtualService
+    {"apiVersion": "networking.istio.io/v1beta1", "kind": "Gateway", "metadata": {"name": "main-gateway"}, "spec": {"selector": {"istio": "ingressgateway"}, "servers": [{"port": {"number": 443, "name": "https", "protocol": "HTTPS"}, "hosts": ["api.example.com"], "tls": {"mode": "SIMPLE", "credentialName": "api-cert"}}]}},
+    {"apiVersion": "networking.istio.io/v1beta1", "kind": "VirtualService", "metadata": {"name": "api-routes"}, "spec": {"hosts": ["api.example.com"], "gateways": ["main-gateway"], "http": [{"match": [{"uri": {"prefix": "/v1"}}], "route": [{"destination": {"host": "api-svc", "port": {"number": 8080}}}]}]}},
+    {"apiVersion": "security.istio.io/v1beta1", "kind": "AuthorizationPolicy", "metadata": {"name": "allow-get"}, "spec": {"selector": {"matchLabels": {"app": "api"}}, "action": "ALLOW", "rules": [{"from": [{"source": {"principals": ["cluster.local/ns/default/sa/frontend"]}}], "to": [{"operation": {"methods": ["GET"]}}]}]}},
+    # HAProxy
+    {"global": {"maxconn": 4096, "log": "stdout local0"}, "defaults": {"mode": "http", "timeout": {"connect": "5s", "client": "30s", "server": "30s"}}, "frontend": {"bind": "*:80", "default_backend": "servers"}, "backend": {"servers": [{"name": "srv1", "address": "10.0.0.1:8080", "check": True}]}},
+    # Linkerd
+    {"apiVersion": "policy.linkerd.io/v1beta1", "kind": "Server", "metadata": {"name": "api-server"}, "spec": {"podSelector": {"matchLabels": {"app": "api"}}, "port": 8080, "proxyProtocol": "HTTP/2"}},
+]
+
+ALL_NO_JSONS = INFRA_CONFIGS + JS_CONFIGS + LANG_CONFIGS + DEVOPS_CONFIGS + DATA_JSONS + IAM_CONFIGS + API_GATEWAY_CONFIGS + APP_FRAMEWORK_CONFIGS + SECURITY_TOOL_CONFIGS + SERVICE_MESH_CONFIGS
 
 for cfg in ALL_NO_JSONS:
     cfg_json = json.dumps(cfg, ensure_ascii=False)
@@ -645,6 +763,25 @@ KEYWORD_OVERLAP = [
     "## Context\nThe gateway service has high latency\n\n## Agent Action\ndocker restart gateway",
     "## Context\nUpdating auth middleware\n\n## Agent Action\nnpm install passport-oauth2",
     "## Agent Action\nkubectl apply -f monitoring/tools-service-monitor.yaml",
+    # More keyword-overlap: auth/gateway/tools/allow/exec/bind in non-agent contexts
+    "API gateway의 rate limiting을 분당 100으로 설정하려고 합니다. Kong 플러그인을 사용합니다.",
+    "gateway bind 포트를 80에서 8080으로 변경하려면 nginx.conf를 수정해야 합니다.",
+    "auth middleware에서 JWT 검증이 실패하고 있습니다. 토큰 만료 시간을 확인해주세요.",
+    "tools 패키지를 최신 버전으로 업데이트하고 exec 바이너리를 재빌드해주세요.",
+    "allow list에 새 IP를 추가하고 deny list에서 오래된 항목을 제거해주세요.",
+    "bind mount로 Docker 볼륨을 설정하고 exec 모드로 컨테이너에 접속해주세요.",
+    "gateway 서비스의 TLS 인증서를 갱신하고 auth 서버와의 연결을 확인해주세요.",
+    "exec permission denied 에러가 발생합니다. chmod +x로 실행 권한을 부여해주세요.",
+    "tools.allow에 대한 유닛 테스트를 작성하고 CI에서 자동 실행되게 해주세요.",
+    "gateway health check가 502를 반환합니다. upstream 서버 상태를 확인해주세요.",
+    "## Agent Action\nkubectl get gateway -n istio-system && kubectl describe gateway main-gw",
+    "## Agent Action\naws iam list-policies --scope Local | jq '.Policies[].PolicyName'",
+    "## Agent Action\nnginx -t && systemctl reload nginx",
+    "## Context\nConfiguring API gateway authentication\n\n## Agent Action\nkong config db_import kong.yml",
+    "## Context\nDebugging auth token validation\n\n## Agent Action\ncurl -H 'Authorization: Bearer token123' http://localhost:8080/api/me",
+    "## Agent Action\nterraform apply -target=module.gateway -auto-approve",
+    "## Context\nSetting up firewall rules\n\n## Agent Action\nufw allow 80/tcp && ufw allow 443/tcp && ufw enable",
+    "## Agent Action\nvault auth enable kubernetes && vault write auth/kubernetes/config kubernetes_host=https://k8s.internal",
 ]
 
 for text in KEYWORD_OVERLAP:
@@ -689,8 +826,8 @@ random.shuffle(examples)
 yes_examples = [e for e in examples if e["messages"][2]["content"] == "YES"]
 no_examples = [e for e in examples if e["messages"][2]["content"] == "NO"]
 
-# Balanced validation: 20 YES + 20 NO = 40
-VALID_PER_CLASS = 20
+# Balanced validation: 30 YES + 30 NO = 60
+VALID_PER_CLASS = 30
 valid_yes = yes_examples[:VALID_PER_CLASS]
 valid_no = no_examples[:VALID_PER_CLASS]
 train_yes = yes_examples[VALID_PER_CLASS:]
