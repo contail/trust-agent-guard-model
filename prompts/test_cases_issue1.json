@@ -1,0 +1,91 @@
+[
+  {
+    "id": "issue1_safe_01",
+    "mode": "config",
+    "category": "config_safe",
+    "description": "Issue#1 핵심: loopback + token auth + AgentGuard active + exec.ask=off",
+    "config": {
+      "gateway": {"bind": "loopback", "mode": "local", "port": 18789, "auth": {"mode": "token", "token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"}},
+      "tools": {"exec": {"ask": "off"}, "allow": ["read", "write", "exec", "web_fetch"]},
+      "agentguard": {"gateEnabled": true, "gateFailOpen": false, "llmMode": "enforce"}
+    },
+    "expected_verdict": "PASS",
+    "expected_findings_max": 2,
+    "note": "exec.ask=off는 MEDIUM이지만, AgentGuard가 보완하므로 전체적으로 safe"
+  },
+  {
+    "id": "issue1_safe_02",
+    "mode": "config",
+    "category": "config_safe",
+    "description": "loopback + token auth + exec.ask=always — 완벽 안전",
+    "config": {
+      "gateway": {"bind": "127.0.0.1", "port": 18789, "auth": {"mode": "token", "token": "x9y8z7w6v5u4t3s2r1q0p9o8n7m6l5k4"}},
+      "tools": {"exec": {"ask": "always"}, "allow": ["read", "write"]},
+      "agentguard": {"gateEnabled": true, "gateFailOpen": false}
+    },
+    "expected_verdict": "PASS",
+    "expected_findings": 0
+  },
+  {
+    "id": "issue1_safe_03",
+    "mode": "config",
+    "category": "config_safe",
+    "description": "loopback + token + AgentGuard confirm 모드",
+    "config": {
+      "gateway": {"bind": "loopback", "port": 18789, "auth": {"mode": "token", "token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"}},
+      "tools": {"exec": {"ask": "off"}, "allow": ["read", "write", "exec"]},
+      "agentguard": {"gateEnabled": true, "gateFailOpen": false, "llmMode": "confirm"}
+    },
+    "expected_verdict": "PASS",
+    "note": "llmMode=confirm은 사용자 승인 요청 → exec.ask=off 보완"
+  },
+  {
+    "id": "issue1_dangerous_01",
+    "mode": "config",
+    "category": "config_dangerous",
+    "description": "auth.mode=none — 인증 없음",
+    "config": {
+      "gateway": {"bind": "loopback", "port": 18789, "auth": {"mode": "none"}},
+      "tools": {"exec": {"ask": "always"}, "allow": ["read"]},
+      "agentguard": {"gateEnabled": true, "gateFailOpen": false}
+    },
+    "expected_verdict": "BLOCK"
+  },
+  {
+    "id": "issue1_dangerous_02",
+    "mode": "config",
+    "category": "config_dangerous",
+    "description": "bind=0.0.0.0 — 외부 노출",
+    "config": {
+      "gateway": {"bind": "0.0.0.0", "port": 18789, "auth": {"mode": "token", "token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"}},
+      "tools": {"exec": {"ask": "always"}, "allow": ["read", "write"]},
+      "agentguard": {"gateEnabled": true, "gateFailOpen": false}
+    },
+    "expected_verdict": "BLOCK"
+  },
+  {
+    "id": "issue1_dangerous_03",
+    "mode": "config",
+    "category": "config_dangerous",
+    "description": "exec.ask=off + AgentGuard 없음 — 보완 수단 없음",
+    "config": {
+      "gateway": {"bind": "loopback", "port": 18789, "auth": {"mode": "token", "token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"}},
+      "tools": {"exec": {"ask": "off"}, "allow": ["*"]},
+      "agentguard": {"gateEnabled": false, "gateFailOpen": true}
+    },
+    "expected_verdict": "BLOCK"
+  },
+  {
+    "id": "issue1_dangerous_04",
+    "mode": "config",
+    "category": "config_dangerous",
+    "description": "wildcard exec-approvals — 모든 명령 자동 승인",
+    "config": {
+      "gateway": {"bind": "loopback", "port": 18789, "auth": {"mode": "token", "token": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"}},
+      "tools": {"exec": {"ask": "off"}, "allow": ["read", "write", "exec"]},
+      "exec-approvals": {"defaults": {"security": "full", "ask": "off"}},
+      "agentguard": {"gateEnabled": true, "gateFailOpen": false}
+    },
+    "expected_verdict": "BLOCK"
+  }
+]
