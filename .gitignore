@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Training checkpoints (keep only final adapters)
+training/detect/*/0000*_adapters.safetensors
+training/adapters_v7/0000*_adapters.safetensors
+
+# Old adapter versions
+training/adapters_v3/
+training/adapters_v4/
+training/adapters_v5/
+training/adapters_v6/
+
+# Processed training data (can be regenerated)
+data/processed/
+
+# Eval results (JSON)
+eval/results/
+
+# macOS
+.DS_Store
