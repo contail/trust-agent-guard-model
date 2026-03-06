@@ -673,6 +673,16 @@ for code in CODE_SNIPPETS:
 # WRITE OUTPUT
 # =====================================================================
 
+# Deduplicate
+seen_keys = set()
+deduped = []
+for e in examples:
+    key = e["messages"][1]["content"] + "|" + e["messages"][2]["content"]
+    if key not in seen_keys:
+        seen_keys.add(key)
+        deduped.append(e)
+examples = deduped
+
 random.seed(42)
 random.shuffle(examples)
 
