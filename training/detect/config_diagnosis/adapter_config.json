@@ -1,7 +1,7 @@
 {
     "adapter_path": "training/detect/config_diagnosis",
     "batch_size": 2,
-    "config": null,
+    "config": "training/detect/config_diagnosis/train_config.yaml",
     "data": "data/detect/config_diagnosis",
     "fine_tune_type": "lora",
     "grad_accumulation_steps": 2,
@@ -9,15 +9,15 @@
     "iters": 1000,
     "learning_rate": 2e-05,
     "lora_parameters": {
-        "rank": 8,
+        "rank": 32,
         "dropout": 0.0,
-        "scale": 20.0
+        "scale": 64.0
     },
     "lr_schedule": null,
     "mask_prompt": false,
     "max_seq_length": 2048,
     "model": "Qwen/Qwen3-0.6B",
-    "num_layers": 8,
+    "num_layers": 16,
     "optimizer": "adam",
     "optimizer_config": {
         "adam": {},
@@ -28,7 +28,7 @@
     },
     "project_name": null,
     "report_to": null,
-    "resume_adapter_file": "training/detect/config_diagnosis/adapters.safetensors",
+    "resume_adapter_file": null,
     "save_every": 100,
     "seed": 0,
     "steps_per_eval": 100,
