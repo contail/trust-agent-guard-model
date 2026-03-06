@@ -6,6 +6,8 @@ NO  = input is a regular agent action (not config)
 Goal: Detect stage recognizes config inputs and routes them to Judge.
 """
 import json
+import random
+import itertools
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -413,6 +415,81 @@ more_nl_config_yes = [
 for desc in more_nl_config_yes:
     make(desc, "YES")
 
+# ============ Volume boost: more YES config variations ============
+# Randomized field value combinations to increase YES volume
+boost_binds = ["loopback", "127.0.0.1", "0.0.0.0", "lan", "tailnet"]
+boost_auths = [
+    {"mode": "token", "token": "boost-token-abcdef1234567890xyz"},
+    {"mode": "none"},
+    {"mode": "password", "password": "p@ssw0rd-boost-2024"},
+    {"mode": "token", "token": "short"},
+]
+boost_exec_asks = ["off", "always", "on-miss"]
+boost_tools = [
+    ["read", "write"],
+    ["read", "write", "exec"],
+    ["read", "write", "exec", "web_fetch", "web_search"],
+    ["*"],
+    ["group:fs", "group:runtime", "exec", "read", "write"],
+]
+boost_guards = [
+    None,
+    {"gateEnabled": True, "gateFailOpen": False, "llmMode": "enforce"},
+    {"gateEnabled": True, "gateFailOpen": True, "llmMode": "monitor"},
+    {"gateEnabled": False},
+]
+
+# Generate combinatorial configs (select diverse subset)
+random.seed(99)
+boost_combos = list(itertools.product(
+    range(len(boost_binds)),
+    range(len(boost_auths)),
+    range(len(boost_exec_asks)),
+    range(len(boost_tools)),
+    range(len(boost_guards)),
+))
+random.shuffle(boost_combos)
+
+boost_count = 0
+for bi, ai, ei, ti, gi in boost_combos:
+    if boost_count >= 15:
+        break
+    cfg = {
+        "gateway": {"bind": boost_binds[bi], "port": 18789, "auth": boost_auths[ai]},
+        "tools": {"exec": {"ask": boost_exec_asks[ei]}, "allow": boost_tools[ti]},
+    }
+    if boost_guards[gi] is not None:
+        cfg["agentguard"] = boost_guards[gi]
+    # 3 formats per config
+    make(json.dumps(cfg, ensure_ascii=False), "YES")
+    make("## Config\n```json\n" + json.dumps(cfg, ensure_ascii=False) + "\n```", "YES")
+    make("## Context\n에이전트 보안 설정 진단 요청\n\n## Config\n" + json.dumps(cfg, ensure_ascii=False), "YES")
+    boost_count += 1
+
+# More other-agent-framework configs (YES)
+extra_framework_configs = [
+    # Windsurf
+    json.dumps({"cascade": {"allowedTools": ["*"], "autoApprove": True, "maxSteps": 100}, "security": {"sandboxMode": "off"}}),
+    json.dumps({"cascade": {"allowedTools": ["read", "write"], "autoApprove": False, "maxSteps": 25}, "security": {"sandboxMode": "strict"}}),
+    # Devin
+    json.dumps({"workspace": {"unrestricted": True, "allowedPaths": ["/*"]}, "network": {"outbound": "allow-all"}, "execution": {"sudo": True, "docker": True}}),
+    json.dumps({"workspace": {"unrestricted": False, "allowedPaths": ["./src", "./tests"]}, "network": {"outbound": "deny"}, "execution": {"sudo": False}}),
+    # SWE-agent
+    json.dumps({"agent": {"model": "gpt-4", "per_instance_cost_limit": 2.0, "command_config": {"allow_install": True, "allow_network": True, "timeout": 600}}}),
+    json.dumps({"agent": {"model": "claude-3", "per_instance_cost_limit": 0.5, "command_config": {"allow_install": False, "allow_network": False, "timeout": 120}}}),
+    # Aider
+    json.dumps({"aider": {"auto_commits": True, "dirty_commits": True, "map_tokens": 2048, "edit_format": "diff", "model": "gpt-4-turbo"}, "git": {"force_push": True}}),
+    json.dumps({"aider": {"auto_commits": False, "dirty_commits": False, "map_tokens": 1024, "edit_format": "whole"}, "git": {"force_push": False}}),
+    # Copilot Workspace
+    json.dumps({"workspace": {"trust": "full", "terminal": {"allow": True, "sudo": True}, "fileAccess": "unrestricted"}, "extensions": {"untrusted": True}}),
+    json.dumps({"workspace": {"trust": "restricted", "terminal": {"allow": False}, "fileAccess": "workspace-only"}, "extensions": {"untrusted": False}}),
+]
+
+for cfg in extra_framework_configs:
+    make(cfg, "YES")
+    make("## Config\n```json\n" + cfg + "\n```", "YES")
+
+
 # ============ Additional JSON Hard Negatives (Issue #5: format bias fix) ============
 # Infra/DevOps configs that are NOT agent configs — prevent JSON=YES bias
 issue5_json_negatives = [
@@ -491,9 +568,69 @@ context_wrapped_yes = [
 for desc in context_wrapped_yes:
     make(desc, "YES")
 
+# ============ Volume boost: more NO examples ============
+# Additional diverse JSON hard negatives
+volume_json_negatives = [
+    # Flutter/Dart pubspec
+    json.dumps({"name": "my_flutter_app", "version": "1.0.0+1", "environment": {"sdk": ">=3.0.0 <4.0.0"}, "dependencies": {"flutter": {"sdk": "flutter"}, "http": "^1.1.0", "provider": "^6.0.5"}, "dev_dependencies": {"flutter_test": {"sdk": "flutter"}, "flutter_lints": "^3.0.0"}}),
+    # Ruby Gemfile.lock as JSON
+    json.dumps({"GEM": {"remote": "https://rubygems.org/", "specs": {"rails": "7.1.2", "puma": "6.4.0", "pg": "1.5.4", "redis": "5.0.7"}}, "PLATFORMS": ["arm64-darwin-23", "x86_64-linux"], "BUNDLED_WITH": "2.4.22"}),
+    # Tailwind config
+    json.dumps({"content": ["./src/**/*.{js,ts,jsx,tsx}"], "theme": {"extend": {"colors": {"primary": "#3b82f6", "secondary": "#10b981"}, "fontFamily": {"sans": ["Inter", "sans-serif"]}}}, "plugins": ["@tailwindcss/forms", "@tailwindcss/typography"]}),
+    # PostCSS config
+    json.dumps({"plugins": {"tailwindcss": {}, "autoprefixer": {}, "cssnano": {"preset": ["default", {"discardComments": {"removeAll": True}}]}}}),
+    # Storybook config
+    json.dumps({"stories": ["../src/**/*.stories.@(js|jsx|ts|tsx)"], "addons": ["@storybook/addon-essentials", "@storybook/addon-interactions"], "framework": {"name": "@storybook/react-vite"}, "docs": {"autodocs": "tag"}}),
+    # Playwright config
+    json.dumps({"testDir": "./tests/e2e", "timeout": 30000, "retries": 2, "workers": 4, "use": {"baseURL": "http://localhost:3000", "trace": "on-first-retry", "screenshot": "only-on-failure"}, "projects": [{"name": "chromium", "use": {"browserName": "chromium"}}, {"name": "firefox", "use": {"browserName": "firefox"}}]}),
+    # Turborepo config
+    json.dumps({"$schema": "https://turbo.build/schema.json", "pipeline": {"build": {"dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"]}, "test": {"dependsOn": ["build"]}, "lint": {}, "dev": {"cache": False, "persistent": True}}}),
+    # Knex migration config
+    json.dumps({"development": {"client": "postgresql", "connection": {"database": "myapp_dev", "user": "postgres", "password": "postgres"}, "pool": {"min": 2, "max": 10}, "migrations": {"tableName": "knex_migrations"}}, "production": {"client": "postgresql", "connection": {"host": "db.internal", "database": "myapp_prod"}}}),
+    # Apache Kafka topic config
+    json.dumps({"topics": [{"name": "user-events", "partitions": 12, "replication_factor": 3, "config": {"retention.ms": 604800000, "cleanup.policy": "delete"}}, {"name": "order-events", "partitions": 6, "replication_factor": 3, "config": {"retention.ms": 2592000000, "cleanup.policy": "compact"}}]}),
+    # RabbitMQ config
+    json.dumps({"rabbit": {"listeners": {"tcp": {"default": 5672}}, "default_vhost": "/", "default_user": "guest", "default_pass": "guest", "management": {"listener": {"port": 15672}}, "disk_free_limit": {"absolute": "2GB"}}}),
+    # Grafana provisioning
+    json.dumps({"apiVersion": 1, "datasources": [{"name": "Prometheus", "type": "prometheus", "access": "proxy", "url": "http://prometheus:9090", "isDefault": True}, {"name": "Loki", "type": "loki", "access": "proxy", "url": "http://loki:3100"}]}),
+    # Jaeger tracing config
+    json.dumps({"service_name": "payment-api", "sampler": {"type": "probabilistic", "param": 0.1}, "reporter": {"log_spans": True, "collector_endpoint": "http://jaeger:14268/api/traces"}, "headers": {"jaeger-debug-id": "debug"}}),
+    # MinIO config
+    json.dumps({"version": "36", "credential": {"accessKey": "minioadmin", "secretKey": "minioadmin"}, "region": "us-east-1", "browser": "on", "domain": "", "worm": "off", "storageclass": {"standard": "EC:2", "rrs": "EC:1"}}),
+    # Lerna monorepo config
+    json.dumps({"$schema": "node_modules/lerna/schemas/lerna-schema.json", "version": "independent", "npmClient": "pnpm", "packages": ["packages/*", "apps/*"], "command": {"publish": {"conventionalCommits": True, "message": "chore(release): publish"}, "version": {"allowBranch": "main"}}}),
+    # Vercel config
+    json.dumps({"buildCommand": "next build", "devCommand": "next dev", "installCommand": "pnpm install", "framework": "nextjs", "regions": ["icn1"], "env": [{"key": "DATABASE_URL", "value": "@database-url"}, {"key": "NEXT_PUBLIC_API_URL", "value": "https://api.example.com"}]}),
+]
+
+for neg in volume_json_negatives:
+    make(neg, "NO")
+    make("## Config\n" + neg, "NO")  # with misleading header
+
+# Additional agent action NO examples (diverse scenarios)
+volume_actions_no = [
+    "## Context\nUser wants to analyze their Git repository history and generate contribution statistics for the team quarterly report.\n\n## Agent Action\ngit log --since='2024-01-01' --until='2024-03-31' --pretty=format:'%an' | sort | uniq -c | sort -rn > /tmp/contrib_stats.txt && git shortlog -sn --since='2024-01-01' && wc -l src/**/*.ts",
+    "## Context\nThe mobile app's API latency has increased. Need to profile the Node.js backend and identify bottlenecks.\n\n## Agent Action\nnode --prof app.js & sleep 30 && kill %1 && node --prof-process isolate-*.log > profile.txt && grep 'ticks' profile.txt | sort -rnk2 | head -20",
+    "## Context\nMigrating the codebase from JavaScript to TypeScript. Starting with the utility functions module.\n\n## Agent Action\nmv src/utils/helpers.js src/utils/helpers.ts && npx tsc --noEmit src/utils/helpers.ts 2>&1 | head -50 && npm run type-check",
+    "## Context\nSetting up a local Kubernetes cluster for development using kind (Kubernetes in Docker).\n\n## Agent Action\nkind create cluster --name dev-cluster --config kind-config.yaml && kubectl cluster-info --context kind-dev-cluster && kubectl apply -f k8s/dev/ && kubectl get pods -A",
+    "## Context\nThe machine learning model needs to be retrained with new data. Running the training pipeline on local GPU.\n\n## Agent Action\npython train.py --data ./data/train_v3.csv --model-dir ./models/v3 --epochs 50 --batch-size 32 --lr 0.001 --gpu 0 && python evaluate.py --model ./models/v3/best.pt --data ./data/test.csv",
+    "## Context\nNeed to set up a reverse proxy with Caddy for local development with automatic HTTPS.\n\n## Agent Action\nbrew install caddy && caddy reverse-proxy --from localhost:443 --to localhost:3000 --internal-certs",
+    "## Agent Action\nfind . -name '*.py' -exec grep -l 'import os' {} \\; | xargs wc -l | sort -n | tail -20",
+    "## Agent Action\nrsync -avz --progress --exclude=node_modules --exclude=.git ./project/ remote-server:/opt/deploy/",
+    "## Agent Action\ncurl -X PUT 'http://localhost:9200/products/_doc/1' -H 'Content-Type: application/json' -d '{\"name\": \"Widget\", \"price\": 29.99, \"category\": \"electronics\"}'",
+    "## Agent Action\nffmpeg -i input.mp4 -vf scale=1280:720 -c:v libx264 -preset fast -crf 22 -c:a aac -b:a 128k output_720p.mp4",
+    "프로덕션 데이터베이스에서 30일 이상 된 로그 레코드를 아카이브하고 삭제하는 작업을 수행해야 합니다. pg_dump로 백업 후 DELETE FROM으로 정리합니다.",
+    "새로운 React 컴포넌트를 만들어야 합니다. shadcn/ui의 Button과 Dialog를 사용해서 확인 모달을 구현해주세요.",
+    "GitHub Actions에서 Docker 이미지 빌드 시간이 15분이 넘습니다. 캐시 레이어를 최적화하고 multi-stage build를 적용해서 빌드 시간을 줄여야 합니다.",
+    "Slack 웹훅으로 배포 알림을 보내는 스크립트를 작성해주세요. 배포 버전, 변경사항 요약, 배포 시간을 포함해야 합니다.",
+    "Python FastAPI 서버에 rate limiting을 추가해야 합니다. slowapi 라이브러리를 사용해서 IP당 분당 60요청으로 제한해주세요.",
+]
+
+for action in volume_actions_no:
+    make(action, "NO")
+
 
 # ============ Write output with balanced validation ============
-import random
 random.seed(42)
 random.shuffle(examples)
 
