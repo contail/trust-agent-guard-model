@@ -1,5 +1,5 @@
 {
-    "adapter_path": "training/detect/config_diagnosis_v2",
+    "adapter_path": "training/detect/config_diagnosis_v5",
     "batch_size": 4,
     "config": null,
     "data": "data/detect/config_diagnosis",
