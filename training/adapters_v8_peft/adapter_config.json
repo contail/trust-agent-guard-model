@@ -1,0 +1,26 @@
+{
+  "auto_mapping": null,
+  "base_model_name_or_path": "Qwen/Qwen3-8B",
+  "bias": "none",
+  "fan_in_fan_out": false,
+  "inference_mode": true,
+  "init_lora_weights": true,
+  "layers_to_transform": null,
+  "layers_pattern": null,
+  "lora_alpha": 20.0,
+  "lora_dropout": 0.0,
+  "modules_to_save": null,
+  "peft_type": "LORA",
+  "r": 8,
+  "revision": null,
+  "target_modules": [
+    "mlp.down_proj",
+    "mlp.gate_proj",
+    "mlp.up_proj",
+    "self_attn.k_proj",
+    "self_attn.o_proj",
+    "self_attn.q_proj",
+    "self_attn.v_proj"
+  ],
+  "task_type": "CAUSAL_LM"
+}
