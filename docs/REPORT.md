@@ -136,6 +136,14 @@ v9에서 안전한 명령어가 위험으로 오분류되던 6건을 해소. Uns
 
 | 항목 | 상세 |
 |------|------|
-| 서빙 | GCP vLLM (port 8001) |
+| 서빙 | GCP vLLM (port 8001, dev) |
 | 변환 파이프라인 | MLX → PEFT conversion |
-| Multi-LoRA | judge_v8, judge_v9 동시 로드 지원 |
+| Multi-LoRA | 복수 어댑터 동시 로드 지원 |
+
+### 어댑터 버전 매핑 (Repo ↔ 서빙)
+
+| Repo (학습) | 서빙 (배포) | 변경 내용 |
+|-------------|-------------|-----------|
+| adapters_v7 | - | 초기 Judge (E2E 89.5%) |
+| adapters_v8 | - | Config Diagnosis 100% |
+| adapters_v9 | security_judge_v1 | Safe FP 해소, 첫 배포 |
