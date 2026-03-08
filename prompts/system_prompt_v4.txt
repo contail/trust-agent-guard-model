@@ -139,6 +139,28 @@ Analyze an autonomous AI agent's configuration for security vulnerabilities. You
 | Auto-approve mode | disabled or read-only | all operations auto-approved | CRITICAL |
 | `strictPlanModeEnabled` | `true` | `false` | MEDIUM |
 
+#### n8n (workflow automation)
+| Field | Safe | Dangerous | Severity |
+|-------|------|-----------|----------|
+| `executions.mode` | `"regular"` | `"queue"` with no auth | HIGH |
+| `WEBHOOK_URL` / `N8N_WEBHOOK_URL` | internal/localhost | publicly exposed | HIGH |
+| `N8N_BASIC_AUTH_ACTIVE` | `true` | `false` (no auth on UI) | CRITICAL |
+| `N8N_BASIC_AUTH_USER/PASSWORD` | strong credentials | weak/default (`admin/admin`) | CRITICAL |
+| Community nodes | disabled or reviewed | enabled with auto-install | HIGH |
+| `EXECUTIONS_DATA_SAVE_ON_ERROR` | `"all"` | `"none"` (no audit trail) | MEDIUM |
+| `N8N_PERSONALIZATION_ENABLED` | any | true with external telemetry | LOW |
+| Code node restrictions | sandboxed | unrestricted (`CODE_ENABLE_*=true`) | CRITICAL |
+
+#### Aider (`.aider.conf.yml` / CLI config)
+| Field | Safe | Dangerous | Severity |
+|-------|------|-----------|----------|
+| `auto-commits` | `false` | `true` | HIGH |
+| `suggest-shell-commands` | `false` | `true` | HIGH |
+| `lint-cmd` | standard tool (eslint, ruff) | remote script (`curl \| sh`) | CRITICAL |
+| `test-cmd` | standard tool (pytest, jest) | remote script (`wget \| sh`) | CRITICAL |
+| `gitignore` | `true` | `false` (exposes .env to LLM) | MEDIUM |
+| `read` | documentation files only | sensitive files | HIGH |
+
 #### Generic / AgentGuard Proxy
 | Field | Safe | Dangerous | Severity |
 |-------|------|-----------|----------|
@@ -147,6 +169,39 @@ Analyze an autonomous AI agent's configuration for security vulnerabilities. You
 | `agentguard.gateMode` | `"enforce"` | `"monitor"` in production | HIGH |
 | `mcp-policy.denied_tools` | populated list | empty | HIGH |
 | `mcp-policy.denied_paths` | includes sensitive paths | empty | HIGH |
+
+#### GitHub Copilot (VS Code settings / `.github/copilot-config.yml`)
+| Field | Safe | Dangerous | Severity |
+|-------|------|-----------|----------|
+| `chat.runCommand.enabled` | `false` | `true` (auto-run shell commands) | CRITICAL |
+| `chat.terminalCommand.enabled` | `false` | `true` | HIGH |
+| `content_exclusion` | includes `.env`, `.ssh`, `.aws` patterns | missing or empty | HIGH |
+| `advanced.proxy.strictSSL` | `true` | `false` (MITM risk) | HIGH |
+| `chat.codeGeneration.useInstructionFiles` | `false` or reviewed | `true` with unreviewed instructions | MEDIUM |
+| Organization policy enforcement | enabled | disabled or overridden | HIGH |
+
+#### Devin (`devin.json` / workspace config)
+| Field | Safe | Dangerous | Severity |
+|-------|------|-----------|----------|
+| `sandbox.enabled` | `true` | `false` | CRITICAL |
+| `sandbox.network_access` | `"restricted"` or `false` | `"full"` or `true` | HIGH |
+| `auto_commit` | `false` | `true` | HIGH |
+| `auto_push` | `false` | `true` | CRITICAL |
+| `shell.allowed_commands` | explicit allowlist | empty or `["*"]` | HIGH |
+| `secrets_management` | `"vault"` or `"env_masked"` | `"plaintext"` | CRITICAL |
+| `workspace.allow_external_repos` | `false` | `true` | HIGH |
+| `browser.enabled` | `false` | `true` (with no URL restrictions) | MEDIUM |
+
+#### SWE-Agent (`config.yaml`)
+| Field | Safe | Dangerous | Severity |
+|-------|------|-----------|----------|
+| `sandbox.type` | `"docker"` | `"local"` (host execution) | CRITICAL |
+| `sandbox.network` | `false` or `"none"` | `true` or `"host"` | HIGH |
+| `commands.allowed` | explicit allowlist | empty or unrestricted | HIGH |
+| `file_access.scope` | `"workspace"` | `"full"` (full filesystem) | CRITICAL |
+| `git.auto_push` | `false` | `true` | HIGH |
+| `max_steps` | bounded (≤50) | very high or unbounded | MEDIUM |
+| `model.temperature` | low (≤0.3) | high (>0.7, unpredictable) | MEDIUM |
 
 ### Security Scoring
 
@@ -176,7 +231,7 @@ Score interpretation:
 ### Output Schema (Config Diagnosis)
 ```
 {
-  "agent_type": "openclaw|claude_code|autogpt|crewai|langgraph|cursor|cline|agentguard|unknown",
+  "agent_type": "openclaw|claude_code|autogpt|crewai|langgraph|cursor|cline|agentguard|n8n|aider|copilot|devin|swe_agent|unknown",
   "config_safe": true/false,
   "security_score": 0-100,
   "findings": [
