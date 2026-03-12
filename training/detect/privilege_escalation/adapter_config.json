@@ -1,8 +1,8 @@
 {
-    "adapter_path": "/Users/sangjin/PycharmProjects/test-llm/security-judge/training/detect/privilege_escalation",
+    "adapter_path": "training/detect/privilege_escalation_v4",
     "batch_size": 2,
     "config": null,
-    "data": "/Users/sangjin/PycharmProjects/test-llm/security-judge/data/detect/privilege_escalation",
+    "data": "data/detect/privilege_escalation_v4",
     "fine_tune_type": "lora",
     "grad_accumulation_steps": 2,
     "grad_checkpoint": false,

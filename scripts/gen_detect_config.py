@@ -6,8 +6,6 @@ NO  = input is a regular agent action (not config)
 Goal: Detect stage recognizes config inputs and routes them to Judge.
 """
 import json
-import random
-import itertools
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -415,240 +413,14 @@ more_nl_config_yes = [
 for desc in more_nl_config_yes:
     make(desc, "YES")
 
-# ============ Volume boost: more YES config variations ============
-# Randomized field value combinations to increase YES volume
-boost_binds = ["loopback", "127.0.0.1", "0.0.0.0", "lan", "tailnet"]
-boost_auths = [
-    {"mode": "token", "token": "boost-token-abcdef1234567890xyz"},
-    {"mode": "none"},
-    {"mode": "password", "password": "p@ssw0rd-boost-2024"},
-    {"mode": "token", "token": "short"},
-]
-boost_exec_asks = ["off", "always", "on-miss"]
-boost_tools = [
-    ["read", "write"],
-    ["read", "write", "exec"],
-    ["read", "write", "exec", "web_fetch", "web_search"],
-    ["*"],
-    ["group:fs", "group:runtime", "exec", "read", "write"],
-]
-boost_guards = [
-    None,
-    {"gateEnabled": True, "gateFailOpen": False, "llmMode": "enforce"},
-    {"gateEnabled": True, "gateFailOpen": True, "llmMode": "monitor"},
-    {"gateEnabled": False},
-]
-
-# Generate combinatorial configs (select diverse subset)
-random.seed(99)
-boost_combos = list(itertools.product(
-    range(len(boost_binds)),
-    range(len(boost_auths)),
-    range(len(boost_exec_asks)),
-    range(len(boost_tools)),
-    range(len(boost_guards)),
-))
-random.shuffle(boost_combos)
-
-boost_count = 0
-for bi, ai, ei, ti, gi in boost_combos:
-    if boost_count >= 15:
-        break
-    cfg = {
-        "gateway": {"bind": boost_binds[bi], "port": 18789, "auth": boost_auths[ai]},
-        "tools": {"exec": {"ask": boost_exec_asks[ei]}, "allow": boost_tools[ti]},
-    }
-    if boost_guards[gi] is not None:
-        cfg["agentguard"] = boost_guards[gi]
-    # 3 formats per config
-    make(json.dumps(cfg, ensure_ascii=False), "YES")
-    make("## Config\n```json\n" + json.dumps(cfg, ensure_ascii=False) + "\n```", "YES")
-    make("## Context\n에이전트 보안 설정 진단 요청\n\n## Config\n" + json.dumps(cfg, ensure_ascii=False), "YES")
-    boost_count += 1
-
-# More other-agent-framework configs (YES)
-extra_framework_configs = [
-    # Windsurf
-    json.dumps({"cascade": {"allowedTools": ["*"], "autoApprove": True, "maxSteps": 100}, "security": {"sandboxMode": "off"}}),
-    json.dumps({"cascade": {"allowedTools": ["read", "write"], "autoApprove": False, "maxSteps": 25}, "security": {"sandboxMode": "strict"}}),
-    # Devin
-    json.dumps({"workspace": {"unrestricted": True, "allowedPaths": ["/*"]}, "network": {"outbound": "allow-all"}, "execution": {"sudo": True, "docker": True}}),
-    json.dumps({"workspace": {"unrestricted": False, "allowedPaths": ["./src", "./tests"]}, "network": {"outbound": "deny"}, "execution": {"sudo": False}}),
-    # SWE-agent
-    json.dumps({"agent": {"model": "gpt-4", "per_instance_cost_limit": 2.0, "command_config": {"allow_install": True, "allow_network": True, "timeout": 600}}}),
-    json.dumps({"agent": {"model": "claude-3", "per_instance_cost_limit": 0.5, "command_config": {"allow_install": False, "allow_network": False, "timeout": 120}}}),
-    # Aider
-    json.dumps({"aider": {"auto_commits": True, "dirty_commits": True, "map_tokens": 2048, "edit_format": "diff", "model": "gpt-4-turbo"}, "git": {"force_push": True}}),
-    json.dumps({"aider": {"auto_commits": False, "dirty_commits": False, "map_tokens": 1024, "edit_format": "whole"}, "git": {"force_push": False}}),
-    # Copilot Workspace
-    json.dumps({"workspace": {"trust": "full", "terminal": {"allow": True, "sudo": True}, "fileAccess": "unrestricted"}, "extensions": {"untrusted": True}}),
-    json.dumps({"workspace": {"trust": "restricted", "terminal": {"allow": False}, "fileAccess": "workspace-only"}, "extensions": {"untrusted": False}}),
-]
-
-for cfg in extra_framework_configs:
-    make(cfg, "YES")
-    make("## Config\n```json\n" + cfg + "\n```", "YES")
-
-
-# ============ Additional JSON Hard Negatives (Issue #5: format bias fix) ============
-# Infra/DevOps configs that are NOT agent configs — prevent JSON=YES bias
-issue5_json_negatives = [
-    # Kubernetes Service
-    json.dumps({"apiVersion": "v1", "kind": "Service", "metadata": {"name": "frontend", "namespace": "default"}, "spec": {"type": "LoadBalancer", "selector": {"app": "frontend"}, "ports": [{"port": 80, "targetPort": 3000}]}}),
-    # Kubernetes ConfigMap
-    json.dumps({"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "app-config"}, "data": {"DATABASE_URL": "postgres://db:5432/myapp", "REDIS_URL": "redis://redis:6379", "LOG_LEVEL": "info"}}),
-    # Kubernetes Ingress
-    json.dumps({"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "myapp-ingress", "annotations": {"nginx.ingress.kubernetes.io/rewrite-target": "/"}}, "spec": {"rules": [{"host": "myapp.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "myapp", "port": {"number": 80}}}}]}}]}}),
-    # Helm values.yaml as JSON
-    json.dumps({"replicaCount": 3, "image": {"repository": "myapp", "tag": "v2.1.0", "pullPolicy": "IfNotPresent"}, "service": {"type": "ClusterIP", "port": 80}, "ingress": {"enabled": True, "hosts": [{"host": "myapp.local", "paths": ["/"]}, ]}, "resources": {"limits": {"cpu": "500m", "memory": "256Mi"}, "requests": {"cpu": "100m", "memory": "128Mi"}}}),
-    # Docker multi-stage build config
-    json.dumps({"stages": [{"name": "builder", "from": "node:20-alpine", "run": ["npm ci", "npm run build"]}, {"name": "runner", "from": "node:20-alpine", "copy_from": "builder", "cmd": ["node", "dist/index.js"]}], "build_args": {"NODE_ENV": "production"}}),
-    # CircleCI config
-    json.dumps({"version": 2.1, "orbs": {"node": "circleci/node@5.1"}, "jobs": {"build-and-test": {"docker": [{"image": "cimg/node:20.0"}], "steps": ["checkout", {"run": "npm ci"}, {"run": "npm test"}, {"run": "npm run build"}]}}, "workflows": {"main": {"jobs": ["build-and-test"]}}}),
-    # GitLab CI
-    json.dumps({"stages": ["test", "build", "deploy"], "test": {"stage": "test", "image": "python:3.11", "script": ["pip install -r requirements.txt", "pytest tests/ -v"]}, "build": {"stage": "build", "script": ["docker build -t myapp:$CI_COMMIT_SHA ."]}}),
-    # Prettier config
-    json.dumps({"semi": True, "singleQuote": True, "tabWidth": 2, "trailingComma": "all", "printWidth": 100, "arrowParens": "always", "endOfLine": "lf"}),
-    # Cargo.toml as JSON
-    json.dumps({"package": {"name": "my-rust-app", "version": "0.1.0", "edition": "2021"}, "dependencies": {"tokio": {"version": "1", "features": ["full"]}, "serde": {"version": "1", "features": ["derive"]}, "axum": "0.7"}, "dev-dependencies": {"reqwest": "0.11"}}),
-    # AWS IAM Policy
-    json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"], "Resource": "arn:aws:s3:::my-bucket/*"}, {"Effect": "Deny", "Action": ["s3:DeleteBucket"], "Resource": "*"}]}),
-    # Datadog monitor
-    json.dumps({"name": "High CPU Alert", "type": "metric alert", "query": "avg(last_5m):avg:system.cpu.user{host:web-server} > 90", "message": "CPU usage is above 90% on {{host.name}}", "tags": ["env:production", "team:platform"], "options": {"thresholds": {"critical": 90, "warning": 80}}}),
-    # Ansible playbook task
-    json.dumps({"hosts": "webservers", "become": True, "tasks": [{"name": "Install nginx", "apt": {"name": "nginx", "state": "latest"}}, {"name": "Start nginx", "service": {"name": "nginx", "state": "started", "enabled": True}}, {"name": "Copy config", "template": {"src": "nginx.conf.j2", "dest": "/etc/nginx/nginx.conf"}}]}),
-    # VS Code settings
-    json.dumps({"editor.fontSize": 14, "editor.tabSize": 2, "editor.formatOnSave": True, "editor.defaultFormatter": "esbenp.prettier-vscode", "files.autoSave": "afterDelay", "typescript.preferences.importModuleSpecifier": "relative", "terminal.integrated.defaultProfile.osx": "zsh"}),
-    # Renovate config
-    json.dumps({"$schema": "https://docs.renovatebot.com/renovate-schema.json", "extends": ["config:recommended"], "packageRules": [{"matchPackagePatterns": ["*"], "automerge": True, "automergeType": "pr"}, {"matchDepTypes": ["devDependencies"], "automerge": True}], "schedule": ["after 10pm and before 5am every weekday"]}),
-    # Sentry config
-    json.dumps({"dsn": "https://examplePublicKey@o0.ingest.sentry.io/0", "tracesSampleRate": 0.2, "environment": "production", "release": "myapp@2.1.0", "integrations": [{"name": "BrowserTracing"}, {"name": "Replay", "options": {"maskAllText": True}}]}),
-    # Terraform backend
-    json.dumps({"terraform": {"backend": {"s3": {"bucket": "my-terraform-state", "key": "prod/terraform.tfstate", "region": "ap-northeast-2", "dynamodb_table": "terraform-locks", "encrypt": True}}}, "required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}}),
-    # Elasticsearch index settings
-    json.dumps({"settings": {"number_of_shards": 3, "number_of_replicas": 1, "analysis": {"analyzer": {"korean": {"type": "custom", "tokenizer": "nori_tokenizer"}}}}, "mappings": {"properties": {"title": {"type": "text", "analyzer": "korean"}, "created_at": {"type": "date"}, "tags": {"type": "keyword"}}}}),
-    # Consul service registration
-    json.dumps({"service": {"name": "payment-api", "id": "payment-api-1", "port": 8080, "tags": ["v2", "production"], "check": {"http": "http://localhost:8080/health", "interval": "10s", "timeout": "5s"}, "meta": {"version": "2.1.0", "team": "payments"}}}),
-    # Envoy proxy config
-    json.dumps({"static_resources": {"listeners": [{"address": {"socket_address": {"address": "0.0.0.0", "port_value": 8080}}, "filter_chains": [{"filters": [{"name": "envoy.filters.network.http_connection_manager", "typed_config": {"route_config": {"virtual_hosts": [{"name": "backend", "domains": ["*"], "routes": [{"match": {"prefix": "/"}, "route": {"cluster": "backend"}}]}]}}}]}]}]}}),
-    # Vault secrets engine config
-    json.dumps({"type": "kv", "path": "secret/", "options": {"version": "2"}, "config": {"max_versions": 10, "cas_required": False, "delete_version_after": "0s"}, "seal_wrap": False}),
-]
-
-for neg in issue5_json_negatives:
-    make(neg, "NO")
-    # Some with ## Config header (confusing format — has header but isn't agent config)
-for neg in issue5_json_negatives[:10]:
-    make("## Config\n```json\n" + neg + "\n```", "NO")
-
-# ============ Additional YES in ## Context format (Issue #5: format bias fix) ============
-# Agent configs wrapped in agent-action-like format to break ## Context → NO pattern
-context_wrapped_yes = [
-    # Config embedded in agent action context
-    "## Context\nAgent reviewing MCP server configuration for security vulnerabilities\n\n## Agent Action\n분석 대상 설정:\n```json\n" + json.dumps({"gateway": {"bind": "0.0.0.0", "auth": {"mode": "none"}}, "tools": {"exec": {"ask": "off"}, "allow": ["*"]}}) + "\n```",
-    "## Context\nSecurity audit requested by the administrator\n\n## Agent Action\n다음 OpenClaw 설정을 보안 진단합니다:\n" + json.dumps({"gateway": {"bind": "loopback", "port": 18789, "auth": {"mode": "token", "token": "abc123"}}, "tools": {"exec": {"ask": "off"}}}),
-    "## Context\nAutomated security scan of agent configuration files\n\n## Agent Action\nConfig 파일 내용을 분석합니다:\n" + json.dumps({"config": {"gateway": {"bind": "loopback", "auth": {"mode": "token", "token": "secure-token-32chars-abcdef12345"}}, "tools": {"exec": {"ask": "off"}}}, "agentguard": {"gateEnabled": True, "llmMode": "enforce"}}),
-    "## Context\nUser requested security review of their Claude Code settings\n\n## Agent Action\nClaude Code 보안 설정 분석:\n" + json.dumps({"permissions": {"allow": ["*"], "deny": []}, "mcpServers": {"unknown": {"command": "npx", "args": ["-y", "mcp-suspicious-tool"]}}}),
-    "## Context\nRoutine security audit of all agent framework configurations\n\n## Agent Action\nAutoGPT 설정 진단:\n" + json.dumps({"EXECUTE_LOCAL_COMMANDS": True, "RESTRICT_TO_WORKSPACE": False, "CONTINUOUS_MODE": True, "SHELL_COMMAND_CONTROL": "denylist", "SHELL_DENYLIST": ""}),
-    "## Context\nChecking agent security posture after deployment\n\n## Agent Action\n배포 후 에이전트 설정 점검:\n" + json.dumps({"gateway": {"bind": "lan", "auth": {"mode": "none"}}, "tools": {"exec": {"ask": "off"}, "allow": ["exec", "read", "write", "web_fetch"]}, "channels": {"discord": {"dmPolicy": "open"}}}),
-    "## Context\nDeveloper submitted config change for review\n\n## Agent Action\n변경된 설정 검토:\n```json\n" + json.dumps({"config": {"gateway": {"bind": "127.0.0.1", "port": 18789, "auth": {"mode": "token", "token": "new-token-after-rotation-xyz789abc"}}, "tools": {"exec": {"ask": "always"}, "allow": ["read", "write"]}}}) + "\n```",
-    "## Context\nAgent configuration compliance check\n\n## Agent Action\n규정 준수 점검 대상 설정:\n" + json.dumps({"config": {"gateway": {"bind": "loopback", "auth": {"mode": "token", "token": "compliance-check-token-1234567890"}}, "tools": {"exec": {"ask": "on-miss"}, "allow": ["read", "write", "exec"]}}, "config_files": {"exec-approvals": {"agents": {"main": {"allowlist": [{"pattern": "/usr/local/bin/gh"}]}}}}}),
-    "## Context\nIncident response: checking if agent config was tampered\n\n## Agent Action\n설정 무결성 확인:\n" + json.dumps({"gateway": {"bind": "0.0.0.0", "port": 18789, "auth": {"mode": "token", "token": "possibly-compromised-token-abc"}}, "tools": {"exec": {"ask": "off"}, "allow": ["*"]}, "agentguard": {"gateEnabled": False}}),
-    "## Context\nPeriodic security review of CrewAI agent settings\n\n## Agent Action\nCrewAI 보안 설정 분석:\n" + json.dumps({"agents": [{"role": "coder", "allow_code_execution": True, "code_execution_mode": "unsafe", "max_iter": 999, "allow_delegation": True}]}),
-    "## Context\nCursor IDE security settings audit\n\n## Agent Action\nCursor 설정 진단:\n" + json.dumps({"networkPolicy": {"default": "allow"}, "filesystem": {"allowWrite": ["/"]}, "cursorignore": []}),
-    "## Context\nLangGraph application security review\n\n## Agent Action\nLangGraph 앱 보안 점검:\n" + json.dumps({"auth": None, "disable_studio_auth": True, "cors": {"allow_origins": ["*"]}, "recursion_limit": 999}),
-    "## Context\nMCP policy review for the security team\n\n## Agent Action\nMCP 정책 진단:\n" + json.dumps({"mcp_policy": {"denied_tools": [], "denied_paths": [], "allowed_servers": ["*"]}}),
-    "## Context\nCline extension security settings review\n\n## Agent Action\nCline 보안 설정 분석:\n" + json.dumps({"CLINE_COMMAND_PERMISSIONS": "*", "clineignore": [], "auto_approve": "all", "strictPlanModeEnabled": False}),
-    "## Context\nComparing before/after config changes for security impact\n\n## Agent Action\n변경 후 설정:\n" + json.dumps({"config": {"gateway": {"bind": "loopback", "port": 18789, "auth": {"mode": "password", "password": "weak"}}, "tools": {"exec": {"ask": "off"}}}}),
-    "## Context\nAgent performing self-diagnosis of its own configuration\n\n## Agent Action\n자체 진단 대상 설정:\n" + json.dumps({"gateway": {"bind": "loopback", "port": 18789, "auth": {"mode": "token", "token": "self-diag-token-abcdef1234567890"}}, "tools": {"exec": {"ask": "off"}, "allow": ["read", "write", "exec"]}, "agentguard": {"gateEnabled": True, "llmMode": "monitor"}}),
-    "## Context\nNew team member onboarding — reviewing default agent config\n\n## Agent Action\n기본 설정 보안 점검:\n" + json.dumps({"gateway": {"bind": "loopback", "port": 18789, "auth": {"mode": "token", "token": "default-onboarding-token-xyz789"}}, "tools": {"exec": {"ask": "always"}, "allow": ["read", "write"]}}),
-    "## Context\nMulti-agent system config audit\n\n## Agent Action\n다중 에이전트 설정 진단:\n" + json.dumps({"config": {"gateway": {"bind": "loopback", "auth": {"mode": "token", "token": "multi-agent-token-1234567890ab"}}, "tools": {"exec": {"ask": "off"}}}, "config_files": {"exec-approvals": {"agents": {"*": {"allowlist": [{"pattern": "*"}]}}}}}),
-]
-
-for desc in context_wrapped_yes:
-    make(desc, "YES")
-
-# ============ Volume boost: more NO examples ============
-# Additional diverse JSON hard negatives
-volume_json_negatives = [
-    # Flutter/Dart pubspec
-    json.dumps({"name": "my_flutter_app", "version": "1.0.0+1", "environment": {"sdk": ">=3.0.0 <4.0.0"}, "dependencies": {"flutter": {"sdk": "flutter"}, "http": "^1.1.0", "provider": "^6.0.5"}, "dev_dependencies": {"flutter_test": {"sdk": "flutter"}, "flutter_lints": "^3.0.0"}}),
-    # Ruby Gemfile.lock as JSON
-    json.dumps({"GEM": {"remote": "https://rubygems.org/", "specs": {"rails": "7.1.2", "puma": "6.4.0", "pg": "1.5.4", "redis": "5.0.7"}}, "PLATFORMS": ["arm64-darwin-23", "x86_64-linux"], "BUNDLED_WITH": "2.4.22"}),
-    # Tailwind config
-    json.dumps({"content": ["./src/**/*.{js,ts,jsx,tsx}"], "theme": {"extend": {"colors": {"primary": "#3b82f6", "secondary": "#10b981"}, "fontFamily": {"sans": ["Inter", "sans-serif"]}}}, "plugins": ["@tailwindcss/forms", "@tailwindcss/typography"]}),
-    # PostCSS config
-    json.dumps({"plugins": {"tailwindcss": {}, "autoprefixer": {}, "cssnano": {"preset": ["default", {"discardComments": {"removeAll": True}}]}}}),
-    # Storybook config
-    json.dumps({"stories": ["../src/**/*.stories.@(js|jsx|ts|tsx)"], "addons": ["@storybook/addon-essentials", "@storybook/addon-interactions"], "framework": {"name": "@storybook/react-vite"}, "docs": {"autodocs": "tag"}}),
-    # Playwright config
-    json.dumps({"testDir": "./tests/e2e", "timeout": 30000, "retries": 2, "workers": 4, "use": {"baseURL": "http://localhost:3000", "trace": "on-first-retry", "screenshot": "only-on-failure"}, "projects": [{"name": "chromium", "use": {"browserName": "chromium"}}, {"name": "firefox", "use": {"browserName": "firefox"}}]}),
-    # Turborepo config
-    json.dumps({"$schema": "https://turbo.build/schema.json", "pipeline": {"build": {"dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"]}, "test": {"dependsOn": ["build"]}, "lint": {}, "dev": {"cache": False, "persistent": True}}}),
-    # Knex migration config
-    json.dumps({"development": {"client": "postgresql", "connection": {"database": "myapp_dev", "user": "postgres", "password": "postgres"}, "pool": {"min": 2, "max": 10}, "migrations": {"tableName": "knex_migrations"}}, "production": {"client": "postgresql", "connection": {"host": "db.internal", "database": "myapp_prod"}}}),
-    # Apache Kafka topic config
-    json.dumps({"topics": [{"name": "user-events", "partitions": 12, "replication_factor": 3, "config": {"retention.ms": 604800000, "cleanup.policy": "delete"}}, {"name": "order-events", "partitions": 6, "replication_factor": 3, "config": {"retention.ms": 2592000000, "cleanup.policy": "compact"}}]}),
-    # RabbitMQ config
-    json.dumps({"rabbit": {"listeners": {"tcp": {"default": 5672}}, "default_vhost": "/", "default_user": "guest", "default_pass": "guest", "management": {"listener": {"port": 15672}}, "disk_free_limit": {"absolute": "2GB"}}}),
-    # Grafana provisioning
-    json.dumps({"apiVersion": 1, "datasources": [{"name": "Prometheus", "type": "prometheus", "access": "proxy", "url": "http://prometheus:9090", "isDefault": True}, {"name": "Loki", "type": "loki", "access": "proxy", "url": "http://loki:3100"}]}),
-    # Jaeger tracing config
-    json.dumps({"service_name": "payment-api", "sampler": {"type": "probabilistic", "param": 0.1}, "reporter": {"log_spans": True, "collector_endpoint": "http://jaeger:14268/api/traces"}, "headers": {"jaeger-debug-id": "debug"}}),
-    # MinIO config
-    json.dumps({"version": "36", "credential": {"accessKey": "minioadmin", "secretKey": "minioadmin"}, "region": "us-east-1", "browser": "on", "domain": "", "worm": "off", "storageclass": {"standard": "EC:2", "rrs": "EC:1"}}),
-    # Lerna monorepo config
-    json.dumps({"$schema": "node_modules/lerna/schemas/lerna-schema.json", "version": "independent", "npmClient": "pnpm", "packages": ["packages/*", "apps/*"], "command": {"publish": {"conventionalCommits": True, "message": "chore(release): publish"}, "version": {"allowBranch": "main"}}}),
-    # Vercel config
-    json.dumps({"buildCommand": "next build", "devCommand": "next dev", "installCommand": "pnpm install", "framework": "nextjs", "regions": ["icn1"], "env": [{"key": "DATABASE_URL", "value": "@database-url"}, {"key": "NEXT_PUBLIC_API_URL", "value": "https://api.example.com"}]}),
-]
-
-for neg in volume_json_negatives:
-    make(neg, "NO")
-    make("## Config\n" + neg, "NO")  # with misleading header
-
-# Additional agent action NO examples (diverse scenarios)
-volume_actions_no = [
-    "## Context\nUser wants to analyze their Git repository history and generate contribution statistics for the team quarterly report.\n\n## Agent Action\ngit log --since='2024-01-01' --until='2024-03-31' --pretty=format:'%an' | sort | uniq -c | sort -rn > /tmp/contrib_stats.txt && git shortlog -sn --since='2024-01-01' && wc -l src/**/*.ts",
-    "## Context\nThe mobile app's API latency has increased. Need to profile the Node.js backend and identify bottlenecks.\n\n## Agent Action\nnode --prof app.js & sleep 30 && kill %1 && node --prof-process isolate-*.log > profile.txt && grep 'ticks' profile.txt | sort -rnk2 | head -20",
-    "## Context\nMigrating the codebase from JavaScript to TypeScript. Starting with the utility functions module.\n\n## Agent Action\nmv src/utils/helpers.js src/utils/helpers.ts && npx tsc --noEmit src/utils/helpers.ts 2>&1 | head -50 && npm run type-check",
-    "## Context\nSetting up a local Kubernetes cluster for development using kind (Kubernetes in Docker).\n\n## Agent Action\nkind create cluster --name dev-cluster --config kind-config.yaml && kubectl cluster-info --context kind-dev-cluster && kubectl apply -f k8s/dev/ && kubectl get pods -A",
-    "## Context\nThe machine learning model needs to be retrained with new data. Running the training pipeline on local GPU.\n\n## Agent Action\npython train.py --data ./data/train_v3.csv --model-dir ./models/v3 --epochs 50 --batch-size 32 --lr 0.001 --gpu 0 && python evaluate.py --model ./models/v3/best.pt --data ./data/test.csv",
-    "## Context\nNeed to set up a reverse proxy with Caddy for local development with automatic HTTPS.\n\n## Agent Action\nbrew install caddy && caddy reverse-proxy --from localhost:443 --to localhost:3000 --internal-certs",
-    "## Agent Action\nfind . -name '*.py' -exec grep -l 'import os' {} \\; | xargs wc -l | sort -n | tail -20",
-    "## Agent Action\nrsync -avz --progress --exclude=node_modules --exclude=.git ./project/ remote-server:/opt/deploy/",
-    "## Agent Action\ncurl -X PUT 'http://localhost:9200/products/_doc/1' -H 'Content-Type: application/json' -d '{\"name\": \"Widget\", \"price\": 29.99, \"category\": \"electronics\"}'",
-    "## Agent Action\nffmpeg -i input.mp4 -vf scale=1280:720 -c:v libx264 -preset fast -crf 22 -c:a aac -b:a 128k output_720p.mp4",
-    "프로덕션 데이터베이스에서 30일 이상 된 로그 레코드를 아카이브하고 삭제하는 작업을 수행해야 합니다. pg_dump로 백업 후 DELETE FROM으로 정리합니다.",
-    "새로운 React 컴포넌트를 만들어야 합니다. shadcn/ui의 Button과 Dialog를 사용해서 확인 모달을 구현해주세요.",
-    "GitHub Actions에서 Docker 이미지 빌드 시간이 15분이 넘습니다. 캐시 레이어를 최적화하고 multi-stage build를 적용해서 빌드 시간을 줄여야 합니다.",
-    "Slack 웹훅으로 배포 알림을 보내는 스크립트를 작성해주세요. 배포 버전, 변경사항 요약, 배포 시간을 포함해야 합니다.",
-    "Python FastAPI 서버에 rate limiting을 추가해야 합니다. slowapi 라이브러리를 사용해서 IP당 분당 60요청으로 제한해주세요.",
-]
-
-for action in volume_actions_no:
-    make(action, "NO")
-
-
-# ============ Write output with balanced validation ============
+# Write train.jsonl
+import random
 random.seed(42)
 random.shuffle(examples)
 
-# Separate YES and NO for balanced validation split
-yes_examples = [e for e in examples if e["messages"][2]["content"] == "YES"]
-no_examples = [e for e in examples if e["messages"][2]["content"] == "NO"]
-
-# Validation: 15 YES + 15 NO = 30 (50:50)
-VALID_PER_CLASS = 15
-valid_yes = yes_examples[:VALID_PER_CLASS]
-valid_no = no_examples[:VALID_PER_CLASS]
-train_yes = yes_examples[VALID_PER_CLASS:]
-train_no = no_examples[VALID_PER_CLASS:]
-
-train = train_yes + train_no
-valid = valid_yes + valid_no
-random.shuffle(train)
-random.shuffle(valid)
+split = int(len(examples) * 0.9)
+train = examples[:split]
+valid = examples[split:]
 
 with open(OUT_DIR / "train.jsonl", "w") as f:
     for ex in train:
@@ -658,26 +430,8 @@ with open(OUT_DIR / "valid.jsonl", "w") as f:
     for ex in valid:
         f.write(json.dumps(ex, ensure_ascii=False) + "\n")
 
-yes_count = len(yes_examples)
-no_count = len(no_examples)
+yes_count = sum(1 for e in examples if e["messages"][2]["content"] == "YES")
+no_count = len(examples) - yes_count
 print(f"Total: {len(examples)} (YES: {yes_count}, NO: {no_count})")
-print(f"Train: {len(train)} (YES: {len(train_yes)}, NO: {len(train_no)})")
-print(f"Valid: {len(valid)} (YES: {VALID_PER_CLASS}, NO: {VALID_PER_CLASS}) — balanced 50:50")
+print(f"Train: {len(train)}, Valid: {len(valid)}")
 print(f"Saved to: {OUT_DIR}")
-
-# Format distribution check
-def check_format_dist(data, label_name):
-    json_fmt = ctx_fmt = other_fmt = 0
-    for e in data:
-        user = e["messages"][1]["content"].strip()
-        if user.startswith("{") or user.startswith("## Config"):
-            json_fmt += 1
-        elif user.startswith("## Context") or user.startswith("## Agent"):
-            ctx_fmt += 1
-        else:
-            other_fmt += 1
-    print(f"  {label_name}: json={json_fmt}, ctx={ctx_fmt}, other={other_fmt}")
-
-print("\nFormat distribution:")
-check_format_dist(yes_examples, "YES")
-check_format_dist(no_examples, "NO")

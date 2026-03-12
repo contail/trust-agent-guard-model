@@ -1,8 +1,8 @@
 {
-    "adapter_path": "/Users/sangjin/PycharmProjects/test-llm/security-judge/training/detect/credential_theft",
+    "adapter_path": "training/detect/credential_theft_v3",
     "batch_size": 2,
     "config": null,
-    "data": "/Users/sangjin/PycharmProjects/test-llm/security-judge/data/detect/credential_theft",
+    "data": "data/detect/credential_theft_v3",
     "fine_tune_type": "lora",
     "grad_accumulation_steps": 2,
     "grad_checkpoint": false,
