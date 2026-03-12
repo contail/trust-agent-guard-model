@@ -26,8 +26,9 @@ Agent Request
 ┌─────────────────────────────────┐
 │  Stage 2: Judge (Qwen3-8B)     │
 │  LoRA 어댑터 — 위협 상세 분석    │
-│  JSON 응답: threat_confirmed,   │
-│  severity, reasoning            │
+│  3 Modes: Action Judge,        │
+│  Config Diagnosis, Session     │
+│  Analysis                      │
 └─────────────────────────────────┘
 ```
 
@@ -115,13 +116,34 @@ python -m mlx_lm.lora \
   --num-layers 8
 ```
 
+## Judge 동작 모드 (3개)
+
+| 모드 | 트리거 | 설명 |
+|------|--------|------|
+| Mode 1: Action Judge | `## Agent Action` | 단일 액션 위협 분석 (6개 카테고리) |
+| Mode 2: Config Diagnosis | `## Config` | 에이전트 설정 보안 진단 (13개 프레임워크) |
+| **Mode 3: Session Analysis** | `## Session History` | **멀티턴 세션 레벨 공격 패턴 탐지** |
+
+### Session Analysis 공격 패턴 (7개)
+
+| 패턴 | 설명 |
+|------|------|
+| RECON_TO_EXFIL | 정찰 → 크레덴셜 수집 → 외부 유출 |
+| TRUST_BUILDING | 안전한 액션으로 신뢰 구축 후 위험 액션 실행 |
+| CREDENTIAL_HARVEST | 여러 크레덴셜 소스 체계적 수집 |
+| PRIV_ESC_CHAIN | 단계적 권한 상승 (recon → exploit) |
+| SUPPLY_CHAIN_STAGING | 환경 설정 변조 후 패키지 설치 |
+| PROMPT_INJECTION_INCREMENTAL | 외부 콘텐츠를 통한 점진적 목표 탈취 |
+| LATERAL_MOVEMENT | 탈취한 자격증명으로 타 시스템 이동 |
+
 ## 프로젝트 구조
 
 ```
 security-judge/
 ├── README.md
 ├── prompts/
-│   ├── system_prompt_v4.txt       # Judge 시스템 프롬프트 (Action Judge + Config Diagnosis)
+│   ├── system_prompt_v5.txt       # Judge 시스템 프롬프트 (Action Judge + Config Diagnosis + Session Analysis)
+│   ├── system_prompt_v4.txt       # 이전 버전 (Action Judge + Config Diagnosis)
 │   └── test_cases_*.json          # 테스트 케이스
 ├── eval/
 │   ├── run_detect_eval.py         # Detect 어댑터 평가
@@ -141,8 +163,10 @@ security-judge/
 ├── data/
 │   ├── prepare_detect.py          # Detect 학습 데이터 생성
 │   ├── prepare_v7.py              # Judge 학습 데이터 생성
+│   ├── prepare_session_chains.py  # Session Analysis 학습 데이터 생성
 │   ├── generate_detect_augment.py # Detect 증량 데이터 생성
 │   ├── detect/                    # Detect train/valid 데이터 (카테고리별)
+│   ├── session_chains/            # Session Analysis train/valid 데이터
 │   ├── issue25/                   # Issue 25 보강 데이터
 │   └── v7_research/               # 연구 기반 시나리오 데이터
 └── scripts/
@@ -157,6 +181,7 @@ security-judge/
 | **Detect v3/v4** | 0.6B × 6 | **480~700 each** | **issue25 보강 + augment (현재)** |
 | Judge v7 | 8B | 1506 examples | v6 379 + research 1127 |
 | Judge v9~v11 | 8B | 확장 | config diagnosis 포함 |
+| **Session chains** | 8B (예정) | **366 examples** | **멀티턴 공격 체인 (7패턴)** |
 
 ## 알려진 한계
 
